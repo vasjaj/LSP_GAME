@@ -5,16 +5,28 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
+#define MESSAGE_SIZE 1024
 #define PORT 8081
 
-char msg[500];
+char msg[MESSAGE_SIZE];
+
+
+char * message_JOIN_GAME(char *buf) {
+  strcpy(buf, "0");
+};
+
+char * message_MOVE(char *buf, char *direction) {
+  strcpy(buf, "1");
+  strcat(buf, direction);
+};
+
 
 void *recvmg(void *my_sock)
 {
     int sock = *((int *)my_sock);
     int len;
     // client thread always ready to receive message
-    while((len = recv(sock,msg,500,0)) > 0) {
+    while((len = recv(sock,msg,MESSAGE_SIZE,0)) > 0) {
         msg[len] = '\0';
         fputs(msg,stdout);
     }
@@ -24,7 +36,7 @@ int main(int argc,char *argv[]){
     pthread_t recvt;
     int len;
     int sock;
-    char send_msg[500];
+    char send_msg[MESSAGE_SIZE];
     struct sockaddr_in ServerIp;
     char client_name[100];
     strcpy(client_name, argv[1]);
@@ -39,7 +51,7 @@ int main(int argc,char *argv[]){
     //creating a client thread which is always waiting for a message
     pthread_create(&recvt,NULL,(void *)recvmg,&sock);
     //ready to read a message from console
-    while(fgets(msg,500,stdin) > 0) {
+    while(fgets(msg,MESSAGE_SIZE,stdin) > 0) {
         strcpy(send_msg,client_name);
         strcat(send_msg,":");
         strcat(send_msg,msg);
