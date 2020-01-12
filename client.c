@@ -32,14 +32,12 @@ void *recvmg(void *my_sock)
     }
 }
 
-int main(int argc,char *argv[]){
+int main(int argc){
     pthread_t recvt;
     int len;
     int sock;
     char send_msg[MESSAGE_SIZE];
     struct sockaddr_in ServerIp;
-    char client_name[100];
-    strcpy(client_name, argv[1]);
 
     sock = socket( AF_INET, SOCK_STREAM,0);
     ServerIp.sin_port = htons(PORT);
@@ -48,19 +46,16 @@ int main(int argc,char *argv[]){
     if( (connect( sock ,(struct sockaddr *)&ServerIp,sizeof(ServerIp))) == -1 )
         printf("\n connection to socket failed \n");
 
-    //creating a client thread which is always waiting for a message
     pthread_create(&recvt,NULL,(void *)recvmg,&sock);
-    //ready to read a message from console
+
     while(fgets(msg,MESSAGE_SIZE,stdin) > 0) {
-        // strcpy(send_msg,client_name);
-        // strcat(send_msg,":");
+
         strcpy(send_msg,msg);
         len = write(sock,send_msg,strlen(send_msg));
         if(len < 0) 
             printf("\n message not sent \n");
     }
 
-    //thread is closed
     pthread_join(recvt,NULL);
     close(sock);
     return 0;

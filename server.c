@@ -23,11 +23,13 @@ pthread_mutex_t mutex;
 int clients[MAX_CLIENT];
 struct Game game;
 int n=0;
+char available_symbols[] = {'A', 'B', 'C', 'D'};
 
 struct Game {
   char game_map[MAP_SIZE][MAP_SIZE + 2];
   char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1];
   int scores[MAX_CLIENT];
+  char symbols[MAX_CLIENT];
   int status;
   int player_count;
 };
@@ -66,6 +68,17 @@ int get_client_id(int sock){
   return -1;
 }
 
+int get_id_by_syboml(char symbol){
+  for(int i = 0; i < MAX_CLIENT; i++) {
+    if (game.symbols == symbol) {
+      return i;
+    }
+  }
+
+  return -1;
+}
+
+
 void substring(char sub[], char s[], int beginIndex, int endIndex) {
    strncpy(sub, s + beginIndex, endIndex - beginIndex);
    sub[endIndex - beginIndex] = '\0';
@@ -73,6 +86,30 @@ void substring(char sub[], char s[], int beginIndex, int endIndex) {
 
 void get_map_row(char *buf, int row) {
   strcpy(buf, game.game_map[row]);
+}
+
+int find_x_location(char symbol) {
+  for(int y = 0; y < MAP_SIZE; y++) {
+    for(int x = 0; x < MAP_SIZE; x++) {
+      // printf("X: %d Y: %d \n", x, y);
+      // printf("%c", game.game_map[x][y]);
+      if (game.game_map[x][y] == symbol) {
+        return y;
+      }
+    }
+  }
+}
+
+int find_y_location(char symbol) {
+  for(int y = 0; y < MAP_SIZE; y++) {
+    for(int x = 0; x < MAP_SIZE; x++) {
+      // printf("X: %d Y: %d \n", x, y);
+      // printf("%c", game.game_map[x][y]);
+      if (game.game_map[x][y] == symbol) {
+        return x;
+      }
+    }
+  }
 }
 
 void print_map(struct Game game) {
@@ -84,6 +121,12 @@ void print_map(struct Game game) {
   }
 
   printf("\n");
+}
+
+void print_scores(struct Game game) {
+  for (int i = 0; i < game.player_count; i++) {
+    printf("ID: %c, USERNAME %s, SYMOL: %c , SCORE: %d \n", i, game.usernames[i], game.symbols[i], game.scores[i]);  
+  }
 }
 
 void print_clients(){
@@ -402,12 +445,15 @@ void handle_JOIN_GAME(char *msg, int sock) {
         return;
     } else {
       game.player_count += 1;
+      game.symbols[id] =  available_symbols[id];
       strcpy(game.usernames[id], username);
+      
 
-      // printf("PLAYER COUNT: %d \n",  game.player_count);
-      // printf("CLIENT USERNAME: %s \n",  game.usernames[id]);
+      printf("PLAYER COUNT: %d \n",  game.player_count);
+      printf("PLAYER USERNAME: %s \n",  game.usernames[id]);
+      printf("PLAYER SYMBOL: %c \n", game.symbols[id]);
 
-      if (game.player_count == 1) {
+      if (game.player_count == 2) {
         // print_clients();
         game.status = GAME_STATUS_ACTIVE;
         message_GAME_START(resp, game.player_count, game.usernames, MAP_SIZE, MAP_SIZE);
@@ -420,8 +466,8 @@ void handle_JOIN_GAME(char *msg, int sock) {
           get_map_row(row, i);
           message_MAP_ROW(buf, i, row);
           
+          // sleep(1);
           send_to_all(buf);
-          sleep(1);
         }
       }
     }
@@ -429,7 +475,83 @@ void handle_JOIN_GAME(char *msg, int sock) {
 }
 
 void handle_MOVE(char *msg, int sock) {
-  printf("IN MOVE \n");
+  int id = get_client_id(sock);
+  char direction = msg[1];
+  char symbol = game.symbols[id];
+  int current_x_loc = find_x_location(symbol);
+  int current_y_loc = find_y_location(symbol);
+
+  printf("DIRECTION: %c \n", direction);
+  printf("ID: %d \n", id);
+  printf("SYMBOL: %c \n", symbol);
+  printf("LOCATIONS: X - %d ; Y - %d \n", current_x_loc, current_y_loc);
+
+  int new_x_loc;
+  int new_y_loc;
+
+  switch (direction) {
+    case 'L':
+      new_x_loc = current_x_loc - 1;
+      new_y_loc = current_y_loc;
+      break;
+    case 'R':
+      new_x_loc = current_x_loc + 1;
+      new_y_loc = current_y_loc;
+      break;
+    case 'U':
+      new_x_loc = current_x_loc;
+      new_y_loc = current_y_loc - 1;
+      break;
+    case 'D':
+      new_x_loc = current_x_loc;
+      new_y_loc = current_y_loc + 1;
+      break;
+  }
+
+  char symbol_at_new_loc = game.game_map[new_y_loc][new_x_loc];
+  switch (symbol_at_new_loc) {
+    case '-':
+      return;
+    case '|':
+      return;
+    case '@':
+      game.game_map[current_y_loc][current_x_loc] = ' ';
+      game.game_map[new_y_loc][new_x_loc] = symbol;
+      game.scores[id] += 1;
+      break;
+    case ' ':
+      game.game_map[current_y_loc][current_x_loc] = ' ';
+      game.game_map[new_y_loc][new_x_loc] = symbol;
+      break;
+    default:
+      printf("IN DEFAULT %c \n", symbol_at_new_loc);
+      if ((symbol_at_new_loc > (game.player_count + '@')) || (symbol_at_new_loc < 'A')) {
+        return;
+      }
+
+      int other_id = get_id_by_syboml(symbol_at_new_loc);
+      
+      printf("ID1 %d, ID2 %d", game.scores[id], game.scores[other_id]);
+      if (game.scores[id] == game.scores[other_id]) {
+        printf("\nEQUAL\n");
+        return;
+      }
+
+      if (game.scores[id] > game.scores[other_id]) {
+        printf("\nATE\n");
+        game.game_map[current_y_loc][current_x_loc] = ' ';
+        game.game_map[new_y_loc][new_x_loc] = symbol;
+        game.scores[id] += game.scores[other_id];
+      } else {
+        printf("\nEATEN\n");
+        game.game_map[current_y_loc][current_x_loc] = ' ';
+        game.scores[other_id] += game.scores[id];
+      }
+      break;
+  }
+  print_map(game);
+  print_scores(game);
+  
   send_to_others(msg,sock);
 }
 
@@ -456,6 +578,9 @@ void *recvmg(void *client_sock){
 }
 
 int main(){
+    // new_game();
+    // printf("%d %d \n",find_x_location('C'), find_y_location('C'));
+
     struct sockaddr_in ServerIp;
     pthread_t recvt;
     int sock=0 , Client_sock=0;
