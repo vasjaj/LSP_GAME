@@ -3,6 +3,7 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include <unistd.h>
 
 #define MESSAGE_SIZE 1024
 #define MIN_CLIENT 1
@@ -24,7 +25,7 @@ struct Game game;
 int n=0;
 
 struct Game {
-  char game_map[MAP_SIZE][MAP_SIZE];
+  char game_map[MAP_SIZE][MAP_SIZE + 2];
   char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1];
   int scores[MAX_CLIENT];
   int status;
@@ -45,6 +46,8 @@ void new_game() {
     int n = 0;
     while ((read = getline(&line, &len, fp)) != -1) {
         strcpy(game.game_map[n], line);
+        // printf("LINE: %s \n", line);
+        // printf("LENGTH: %d \n", strlen(line));
         n++;
     }
     fclose(fp);
@@ -68,12 +71,19 @@ void substring(char sub[], char s[], int beginIndex, int endIndex) {
    sub[endIndex - beginIndex] = '\0';
 }
 
+void get_map_row(char *buf, int row) {
+  strcpy(buf, game.game_map[row]);
+}
 
 void print_map(struct Game game) {
-    printf("PRINTING MAP");
-    for (int i  = 0; i < MAP_SIZE; i++) {
-      printf("%s", game.game_map[i]);
-    }
+  char buf[100];
+
+  for (int i = 0; i < MAP_SIZE; i++) {
+    get_map_row(buf, i);
+    printf(buf);
+  }
+
+  printf("\n");
 }
 
 void print_clients(){
@@ -212,12 +222,13 @@ char * message_GAME_START(char *buf, int player_count, char usernames[MAX_CLIENT
   }
 };
 
-char * message_MAP_ROW(char *buf, int *row_num, char *row) {
-  char *row_num_str[12];
+char * message_MAP_ROW(char *buf, int row_num, char row[MAP_SIZE + 2]) {
+  char row_num_str[12];
   sprintf(row_num_str, "%d", row_num);
-
+  // printf("NUM: %s \n", row_num_str);
   strcpy(buf, "6");
-
+  // printf("BUF: %s \n", buf);
+  
   switch (strlen(row_num_str)) {
     case 1:
       strcat(buf, "00");
@@ -231,8 +242,10 @@ char * message_MAP_ROW(char *buf, int *row_num, char *row) {
       strcat(buf, row_num_str);
       break;
   }
-
+  // printf("adding row \n");
+  // printf("ROW: %s \n", row);
   strcat(buf, row);
+  // printf("added row \n");
 };
 
 char * message_GAME_UPDATE(char *buf, int player_count, int x_player_coords[], int y_player_coords[], int food_count, int x_food_coords[], int y_food_coords[]) {
@@ -394,10 +407,22 @@ void handle_JOIN_GAME(char *msg, int sock) {
       // printf("PLAYER COUNT: %d \n",  game.player_count);
       // printf("CLIENT USERNAME: %s \n",  game.usernames[id]);
 
-      if (game.player_count == 3) {
+      if (game.player_count == 1) {
         // print_clients();
+        game.status = GAME_STATUS_ACTIVE;
         message_GAME_START(resp, game.player_count, game.usernames, MAP_SIZE, MAP_SIZE);
         send_to_all(resp);
+
+        for (int i = 0; i < MAP_SIZE; i++) {
+          char row[MAP_SIZE + 2];
+          char buf[MESSAGE_SIZE];
+
+          get_map_row(row, i);
+          message_MAP_ROW(buf, i, row);
+          
+          send_to_all(buf);
+          sleep(1);
+        }
       }
     }
   }  
@@ -431,16 +456,6 @@ void *recvmg(void *client_sock){
 }
 
 int main(){
-    // new_game();
-    // game.player_count = 2;
-    // strcpy(game.usernames[0], "username1");
-    // strcpy(game.usernames[1], "username2");
-    // char *resp;
-    // message_GAME_START(resp, game.player_count, game.usernames, MAP_SIZE, MAP_SIZE);
-    // printf(resp);
-    // print_map(game);
-
-
     struct sockaddr_in ServerIp;
     pthread_t recvt;
     int sock=0 , Client_sock=0;
@@ -459,7 +474,8 @@ int main(){
 
 
     new_game();
-    // print_map(game);
+    print_map(game);
+
     while(1){
         if( (Client_sock = accept(sock, (struct sockaddr *)NULL,NULL)) < 0 ) {
             printf("accept failed  \n");
