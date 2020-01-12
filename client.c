@@ -28,7 +28,7 @@ void *recvmg(void *my_sock)
     // client thread always ready to receive message
     while((len = recv(sock,msg,MESSAGE_SIZE,0)) > 0) {
         msg[len] = '\0';
-        fputs(msg,stdout);
+        printf("MESSAGE FROM SERVER: %s \n", msg);
     }
 }
 
@@ -52,9 +52,9 @@ int main(int argc,char *argv[]){
     pthread_create(&recvt,NULL,(void *)recvmg,&sock);
     //ready to read a message from console
     while(fgets(msg,MESSAGE_SIZE,stdin) > 0) {
-        strcpy(send_msg,client_name);
-        strcat(send_msg,":");
-        strcat(send_msg,msg);
+        // strcpy(send_msg,client_name);
+        // strcat(send_msg,":");
+        strcpy(send_msg,msg);
         len = write(sock,send_msg,strlen(send_msg));
         if(len < 0) 
             printf("\n message not sent \n");
