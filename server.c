@@ -8,10 +8,11 @@
 #define MESSAGE_SIZE 1024
 #define MIN_CLIENT 1
 #define MAX_CLIENT 3
+#define MAX_FOOD_COUNT 5
 #define MAP_SIZE 10
 #define MAX_SCORE 100
 #define MAX_USERNAME_LENGTH 16
-#define PORT 8081
+#define PORT 8080
 #define GAME_STATUS_ACTIVE 0
 #define GAME_STATUS_INACTIVE 1
 #define SECOND_BEFORE_START int
@@ -30,8 +31,10 @@ struct Game {
   char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1];
   int scores[MAX_CLIENT];
   char symbols[MAX_CLIENT];
+  int player_statuses[MAX_CLIENT];
   int status;
   int player_count;
+  int food_count;
 };
 
 void new_game() {
@@ -70,7 +73,7 @@ int get_client_id(int sock){
 
 int get_id_by_syboml(char symbol){
   for(int i = 0; i < MAX_CLIENT; i++) {
-    if (game.symbols == symbol) {
+    if (game.symbols[i] == symbol) {
       return i;
     }
   }
@@ -110,7 +113,43 @@ int find_y_location(char symbol) {
       }
     }
   }
+
+  return -1;
 }
+
+int * get_all_x_locations() {
+  int locations[MAX_CLIENT];
+  printf("SEARCHING ALL X LOCATIONS \n");
+
+  for (int i = 0; i < game.player_count; i++) {
+    printf("X location for symbol %c: %d \n", game.symbols[i], find_x_location(game.symbols[i]));
+
+    locations[i] = find_x_location(game.symbols[i]);
+  }
+
+  return locations;
+}
+
+int * get_all_y_locations() {
+  int locations[MAX_CLIENT];
+  printf("SEARCHING ALL Y LOCATIONS \n");
+
+  for (int i = 0; i < game.player_count; i++) {
+    printf("Y location for symbol  %c: %d \n", game.symbols[i], find_y_location(game.symbols[i]));
+    locations[i] = find_y_location(game.symbols[i]);
+  }
+
+  return locations;
+}
+
+// int * get_all_food_locations() {
+//   int locations[MAX_CLIENT];
+
+//   for (int i = 0; i < game.player_count; i++) {
+//     locations[i] = find_y_location(game.symbols[i]);
+//   }
+// }
+
 
 void print_map(struct Game game) {
   char buf[100];
@@ -123,9 +162,9 @@ void print_map(struct Game game) {
   printf("\n");
 }
 
-void print_scores(struct Game game) {
+void print_stats(struct Game game) {
   for (int i = 0; i < game.player_count; i++) {
-    printf("ID: %c, USERNAME %s, SYMOL: %c , SCORE: %d \n", i, game.usernames[i], game.symbols[i], game.scores[i]);  
+    printf("ID: %d, USERNAME %s, SYMOL: %c , SCORE: %d \n", i, game.usernames[i], game.symbols[i], game.scores[i]);  
   }
 }
 
@@ -134,12 +173,12 @@ void print_clients(){
   for (int i = 0; i < game.player_count; i ++) {
     printf("USERNAME %s \n", game.usernames[i]);
   }
-  printf("================= \n");
+  printf("\n");
 }
 
 int check_username(char *username){
-  // printf("COMPARING USERNAME: %s \n", username);
   for (int i = 0; i < game.player_count; i ++) {
+    // printf("COMPARING USERNAME: %s and %s \n", username, game.usernames[i]);
     if (strcmp(username, game.usernames[i]) == 0) {
       // printf("DUPLICATE: %s and %s", game.usernames[i], username);
       return 1;
@@ -206,15 +245,15 @@ void message_LOBBY_INFO(char *buf, int player_count, char usernames[MAX_CLIENT][
   }
 };
 
-char * message_GAME_IN_PROGRESS(char *buf) {
+void  message_GAME_IN_PROGRESS(char *buf) {
   strcpy(buf, "3");
 };
 
-char * message_USERNAME_TAKEN(char *buf) {
+void message_USERNAME_TAKEN(char *buf) {
   strcpy(buf, "4");
 };
 
-char * message_GAME_START(char *buf, int player_count, char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1], int map_height, int map_width) {
+void message_GAME_START(char *buf, int player_count, char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1], int map_height, int map_width) {
   char *count_str[12];
   sprintf(count_str, "%d", player_count);
   char *width_str[12];
@@ -265,7 +304,7 @@ char * message_GAME_START(char *buf, int player_count, char usernames[MAX_CLIENT
   }
 };
 
-char * message_MAP_ROW(char *buf, int row_num, char row[MAP_SIZE + 2]) {
+void message_MAP_ROW(char *buf, int row_num, char row[MAP_SIZE + 2]) {
   char row_num_str[12];
   sprintf(row_num_str, "%d", row_num);
   // printf("NUM: %s \n", row_num_str);
@@ -291,24 +330,33 @@ char * message_MAP_ROW(char *buf, int row_num, char row[MAP_SIZE + 2]) {
   // printf("added row \n");
 };
 
-char * message_GAME_UPDATE(char *buf, int player_count, int x_player_coords[], int y_player_coords[], int food_count, int x_food_coords[], int y_food_coords[]) {
-    char *player_count_str[12];
-    sprintf(player_count_str, "%d", player_count);
-    char *food_count_str[12];
-    sprintf(food_count_str, "%d", food_count);
+void message_GAME_UPDATE(char *buf) {
+    // printf("IN GAME UPDATE, PLAYER COUNT: %d; FOOD COUNT: %d \n",  game.player_count, game.food_count);
+    char player_count_str[12];
+    sprintf(player_count_str, "%d", game.player_count);
+    // char food_count_str[12];
+    // sprintf(food_count_str, "%d", game.food_count);
 
     strcpy(buf, "7");
     
     strcat(buf, player_count_str);
 
-    for (int i; i < player_count; i++) {
-      char *x[12];
-      sprintf(x, "%d", x_player_coords[i]);
+    for (int i = 0; i < game.player_count; i++) {   
+      char x[12];
+      sprintf(x, "%d", find_x_location(game.symbols[i]));
 
-      char *y[12];
-      sprintf(y, "%d", y_player_coords[i]);
+      char y[12];
+      sprintf(y, "%d",  find_y_location(game.symbols[i]));
 
-      switch (strlen(x)) {
+      char points[12];
+      sprintf(points, "%d", game.scores[i]);
+
+      // printf("x location: %c, y location: %c, score: %c \n", x, y, points);
+
+      if (game.player_statuses[i] == 1) {
+        strcat(buf, "000");
+      } else {
+        switch (strlen(x)) {
         case 1:
           strcat(buf, "00");
           strcat(buf, x);
@@ -320,9 +368,13 @@ char * message_GAME_UPDATE(char *buf, int player_count, int x_player_coords[], i
         case 3:
           strcat(buf, x);
           break;
+        }
       }
       
-       switch (strlen(y)) {
+      if (game.player_statuses[i] == 1) {
+        strcat(buf, "000");
+      } else {
+        switch (strlen(y)) {
         case 1:
           strcat(buf, "00");
           strcat(buf, y);
@@ -333,53 +385,99 @@ char * message_GAME_UPDATE(char *buf, int player_count, int x_player_coords[], i
           break;
         case 3:
           strcat(buf, y);
+          break;
+      }
+      }
+
+      switch (strlen(points)) {
+        case 1:
+          strcat(buf, "00");
+          strcat(buf, points);
+          break;
+        case 2:
+          strcat(buf, "0");
+          strcat(buf, points);
+          break;
+        case 3:
+          strcat(buf, points);
           break;
       }
     }
 
-    strcat(buf, food_count_str);
-    for (int i; i < food_count; i++) {
-      char *x[12];
-      sprintf(x, "%d", x_food_coords[i]);
-
-      char *y[12];
-      sprintf(y, "%d", y_food_coords[i]);
-
-      switch (strlen(x)) {
-        case 1:
-          strcat(buf, "00");
-          strcat(buf, x);
-          break;
-        case 2:
-          strcat(buf, "0");
-          strcat(buf, x);
-          break;
-        case 3:
-          strcat(buf, x);
-          break;
+    int food_count = 0;
+    for(int y = 0; y < MAP_SIZE; y++) {
+      for(int x = 0; x < MAP_SIZE; x++) {
+        // printf("X: %d Y: %d \n", x, y);
+        // printf("%c", game.game_map[x][y]);
+        if (game.game_map[x][y] == '@') {
+          food_count++;
+        }
       }
-      
-       switch (strlen(y)) {
-        case 1:
-          strcat(buf, "00");
-          strcat(buf, y);
-          break;
-        case 2:
-          strcat(buf, "0");
-          strcat(buf, y);
-          break;
-        case 3:
-          strcat(buf, y);
-          break;
+    }
+
+    char food_count_str[12];
+    sprintf(food_count_str, "%d", food_count);
+    switch (strlen(food_count_str)) {
+      case 1:
+        strcat(buf, "00");
+        strcat(buf, food_count_str);
+        break;
+      case 2:
+        strcat(buf, "0");
+        strcat(buf, food_count_str);
+        break;
+      case 3:
+        strcat(buf, food_count_str);
+        break;
+    }
+
+    for(int y = 0; y < MAP_SIZE; y++) {
+      for(int x = 0; x < MAP_SIZE; x++) {
+        // printf("X: %d Y: %d \n", x, y);
+        // printf("%c", game.game_map[x][y]);
+        if (game.game_map[x][y] == '@') {
+          char food_x_coord[12];
+          char food_y_coord[12];
+          sprintf(food_x_coord, "%d", y);
+          sprintf(food_y_coord, "%d", x);
+
+          switch (strlen(food_x_coord)) {
+            case 1:
+              strcat(buf, "00");
+              strcat(buf, food_x_coord);
+              break;
+            case 2:
+              strcat(buf, "0");
+              strcat(buf, food_x_coord);
+              break;
+            case 3:
+              strcat(buf, food_x_coord);
+              break;
+          }
+
+          switch (strlen(food_y_coord)) {
+            case 1:
+              strcat(buf, "00");
+              strcat(buf, food_y_coord);
+              break;
+            case 2:
+              strcat(buf, "0");
+              strcat(buf, food_y_coord);
+              break;
+            case 3:
+              strcat(buf, food_y_coord);
+              break;
+          }
+        }
       }
     }
 };
 
-char * message_PLAYER_DEAD(char *buf) {
+void message_PLAYER_DEAD(char *buf) {
   strcpy(buf, "8");
 };
 
-char * message_GAME_END(char *buf, int player_count, char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1], int results[]) {
+void message_GAME_END(char *buf, int player_count, char usernames[MAX_CLIENT][MAX_USERNAME_LENGTH + 1], int results[]) {
   char *player_count_str[12];
   sprintf(player_count_str, "%d", player_count);
 
@@ -436,7 +534,7 @@ void handle_JOIN_GAME(char *msg, int sock) {
     char username[17];
     strcpy(username, input);
 
-    printf("CLIENT USERNAME: %s \n",  username);
+    // printf("CLIENT USERNAME: %s \n",  username);
 
     if (check_username(username) == 1) {
         // printf("USERNAME TAKEN");
@@ -449,9 +547,9 @@ void handle_JOIN_GAME(char *msg, int sock) {
       strcpy(game.usernames[id], username);
       
 
-      printf("PLAYER COUNT: %d \n",  game.player_count);
-      printf("PLAYER USERNAME: %s \n",  game.usernames[id]);
-      printf("PLAYER SYMBOL: %c \n", game.symbols[id]);
+      // printf("PLAYER COUNT: %d \n",  game.player_count);
+      // printf("PLAYER USERNAME: %s \n",  game.usernames[id]);
+      // printf("PLAYER SYMBOL: %c \n", game.symbols[id]);
 
       if (game.player_count == 2) {
         // print_clients();
@@ -475,6 +573,11 @@ void handle_JOIN_GAME(char *msg, int sock) {
 }
 
 void handle_MOVE(char *msg, int sock) {
+  if (game.status != GAME_STATUS_ACTIVE) {
+    return;
+  }
+
+  char resp[MESSAGE_SIZE];
   int id = get_client_id(sock);
   char direction = msg[1];
   char symbol = game.symbols[id];
@@ -506,7 +609,10 @@ void handle_MOVE(char *msg, int sock) {
       new_x_loc = current_x_loc;
       new_y_loc = current_y_loc + 1;
       break;
+    default:
+      return;
   }
+  printf("NEW LOCATIONS: X - %d ; Y - %d \n", new_x_loc, new_y_loc);
 
   char symbol_at_new_loc = game.game_map[new_y_loc][new_x_loc];
   switch (symbol_at_new_loc) {
@@ -518,41 +624,52 @@ void handle_MOVE(char *msg, int sock) {
       game.game_map[current_y_loc][current_x_loc] = ' ';
       game.game_map[new_y_loc][new_x_loc] = symbol;
       game.scores[id] += 1;
+      
+      message_GAME_UPDATE(resp);
+      send_to_all(resp);
+      
       break;
     case ' ':
       game.game_map[current_y_loc][current_x_loc] = ' ';
       game.game_map[new_y_loc][new_x_loc] = symbol;
+      // printf("TEST: x %d, y %d \n", x_locations[0], y_locations[0]);
+      int *food_x_coords;
+      int *foo_y_coords;
+      
       break;
     default:
-      printf("IN DEFAULT %c \n", symbol_at_new_loc);
       if ((symbol_at_new_loc > (game.player_count + '@')) || (symbol_at_new_loc < 'A')) {
         return;
       }
 
       int other_id = get_id_by_syboml(symbol_at_new_loc);
       
-      printf("ID1 %d, ID2 %d", game.scores[id], game.scores[other_id]);
       if (game.scores[id] == game.scores[other_id]) {
-        printf("\nEQUAL\n");
         return;
       }
 
       if (game.scores[id] > game.scores[other_id]) {
-        printf("\nATE\n");
+        // printf("Player with id: %d; sybmol: %c; score: %d ate player with id: %d; sybmol: %c; score: %d", id, symbol, game.scores[id], other_id, symbol_at_new_loc, game.scores[other_id]);
         game.game_map[current_y_loc][current_x_loc] = ' ';
         game.game_map[new_y_loc][new_x_loc] = symbol;
         game.scores[id] += game.scores[other_id];
+        game.player_statuses[other_id] = 1;
       } else {
-        printf("\nEATEN\n");
+        // printf("Player with id: %d; sybmol: %c; score: %d is eaten by player with id: %d; sybmol: %c; score: %d", id, symbol, game.scores[id], other_id, symbol_at_new_loc, game.scores[other_id]);
         game.game_map[current_y_loc][current_x_loc] = ' ';
         game.scores[other_id] += game.scores[id];
+        game.player_statuses[id] = 1;
+        message_PLAYER_DEAD(resp);
+        send_to_one(resp, sock);
       }
+      
       break;
   }
-  print_map(game);
-  print_scores(game);
   
-  send_to_others(msg,sock);
+  message_GAME_UPDATE(resp);
+  send_to_all(resp);
+  print_map(game);
+  print_stats(game);
 }
 
 void *recvmg(void *client_sock){
