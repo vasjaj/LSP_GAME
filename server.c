@@ -1,4 +1,5 @@
 #include <sys/socket.h>
+#include <time.h>
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -11,7 +12,7 @@
 #define MAP_SIZE 30
 #define MAX_SCORE 3
 #define MAX_USERNAME_LENGTH 16
-#define PORT 8080
+#define PORT 8081
 #define GAME_STATUS_ACTIVE 0
 #define GAME_STATUS_INACTIVE 0
 #define GAME_STATUS_ACTIVE 1
@@ -114,6 +115,18 @@ int find_y_location(char symbol) {
   }
 
   return -1;
+}
+
+void generate_food() {
+  for(;;) {
+    int rand_x = rand() % MAP_SIZE + 1;
+    int rand_y = rand() % MAP_SIZE + 1;
+
+    if (game.game_map[rand_x][rand_y] == ' ') {
+      game.game_map[rand_x][rand_y] = '@';
+      break;
+    }
+  }
 }
 
 int * get_all_x_locations() {
@@ -584,6 +597,7 @@ void handle_MOVE(char *msg, int sock) {
       game.game_map[current_y_loc][current_x_loc] = ' ';
       game.game_map[new_y_loc][new_x_loc] = symbol;
       game.scores[id] += 1;
+      generate_food();
       
       break;
     case ' ':
@@ -636,63 +650,65 @@ void handle_MOVE(char *msg, int sock) {
 }
 
 void *recvmg(void *client_sock){
-    int sock = *((int *)client_sock);
-    char msg[MESSAGE_SIZE];
-    int len;
-    while((len = recv(sock,msg,MESSAGE_SIZE,0)) > 0) {
-        char message_type = msg[0];
-        msg[len] = '\0';
-        
-        printf("MESSAGE FROM CLIENT: %s \n", msg);
+  int sock = *((int *)client_sock);
+  char msg[MESSAGE_SIZE];
+  int len;
+  while((len = recv(sock,msg,MESSAGE_SIZE,0)) > 0) {
+    char message_type = msg[0];
+    msg[len] = '\0';
+    
+    printf("MESSAGE FROM CLIENT: %s \n", msg);
 
-        pthread_mutex_lock(&game.mutex);
-        
-        switch (message_type) {
-        case '0':
-          handle_JOIN_GAME(msg, sock);
-          break;
-        case '1':
-          handle_MOVE(msg, sock);
-          break;
-        }
-
-        pthread_mutex_unlock(&game.mutex);
+    pthread_mutex_lock(&game.mutex);
+    
+    switch (message_type) {
+    case '0':
+      handle_JOIN_GAME(msg, sock);
+      break;
+    case '1':
+      handle_MOVE(msg, sock);
+      break;
     }
+
+    pthread_mutex_unlock(&game.mutex);
+  }
 }
 
 int main(){
-    struct sockaddr_in ServerIp;
-    pthread_t recvt;
-    int sock=0 , Client_sock=0;
+  struct sockaddr_in server_ip;
+  pthread_t recvt;
+  int sock=0 , client_sock=0;
 
-    ServerIp.sin_family = AF_INET;
-    ServerIp.sin_port = htons(PORT);
-    ServerIp.sin_addr.s_addr = inet_addr("127.0.0.1");
-    sock = socket( AF_INET , SOCK_STREAM, 0 );
-    if( bind( sock, (struct sockaddr *)&ServerIp, sizeof(ServerIp)) == -1 )
-        printf("BINDING ERROR \n");
-    else
-        printf("STARTED\n");
+  server_ip.sin_family = AF_INET;
+  server_ip.sin_port = htons(PORT);
+  server_ip.sin_addr.s_addr = inet_addr("127.0.0.1");
+  sock = socket( AF_INET , SOCK_STREAM, 0 );
+  if( bind( sock, (struct sockaddr *)&server_ip, sizeof(server_ip)) == -1 ) {
+    printf("BINDING ERROR \n");
+  } else {
+     printf("STARTED\n");
+  }
 
-    if( listen( sock ,20 ) == -1 )
-        printf("FAIL \n");
+  if(listen(sock, 30) == -1) {
+      printf("FAIL \n");
+  }
 
+  rand(time(NULL));  
+  new_game();
+  // print_map(game);
 
-    new_game();
-    // print_map(game);
-
-    while(1){
-        if( (Client_sock = accept(sock, (struct sockaddr *)NULL,NULL)) < 0 ) {
-            printf("SOCK FAIL \n");
-        }
-
-        pthread_mutex_lock(&mutex);
-        clients[n]= Client_sock;
-        n++;
-
-        pthread_create(&recvt,NULL,(void *)recvmg,&Client_sock);
-        pthread_mutex_unlock(&mutex);
+  while(1){
+    if( (client_sock = accept(sock, (struct sockaddr *)NULL,NULL)) < 0 ) {
+      printf("SOCK FAIL \n");
     }
-    return 0; 
+
+    pthread_mutex_lock(&mutex);
+    clients[n]= client_sock;
+    n++;
+
+    pthread_create(&recvt,NULL,(void *)recvmg,&client_sock);
+    pthread_mutex_unlock(&mutex);
+  }
+  return 0; 
 
 }
