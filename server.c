@@ -536,7 +536,7 @@ void handle_JOIN_GAME(char *msg, int sock) {
           get_map_row(row, i);
           message_MAP_ROW(buf, i, row);
           
-          // sleep(1);
+          sleep(1);
           send_to_all(buf);
         }
       }
