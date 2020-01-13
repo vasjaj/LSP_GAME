@@ -8,10 +8,10 @@
 #define MIN_CLIENT_COUNT 1
 #define MAX_CLIENT_COUNT 3
 #define MAX_FOOD_COUNT 5
-#define MAP_SIZE 10
+#define MAP_SIZE 30
 #define MAX_SCORE 3
 #define MAX_USERNAME_LENGTH 16
-#define PORT 8081
+#define PORT 8080
 #define GAME_STATUS_ACTIVE 0
 #define GAME_STATUS_INACTIVE 0
 #define GAME_STATUS_ACTIVE 1
@@ -53,6 +53,11 @@ void new_game() {
         n++;
     }
     fclose(fp);
+
+    for (int i = 0; i < game.player_count; i ++) {
+      game.scores[i] = 0;
+      game.player_statuses[i] = 0;
+    }
 
     game.status = GAME_STATUS_INACTIVE;
     game.player_count = 0;
@@ -153,19 +158,10 @@ void print_stats(struct Game game) {
   }
 }
 
-void print_clients(){
-  printf("COUNT: %d \n", game.player_count);
-  for (int i = 0; i < game.player_count; i ++) {
-    printf("USERNAME %s \n", game.usernames[i]);
-  }
-  printf("\n");
-}
 
 int check_username(char *username){
   for (int i = 0; i < game.player_count; i ++) {
-    // printf("COMPARING USERNAME: %s and %s \n", username, game.usernames[i]);
     if (strcmp(username, game.usernames[i]) == 0) {
-      // printf("DUPLICATE: %s and %s", game.usernames[i], username);
       return 1;
     }
   }
@@ -179,7 +175,7 @@ void send_to_others(char *msg,int curr){
     for(i = 0; i < n; i++) {
         if(clients[i] != curr) {
             if(send(clients[i],msg,strlen(msg),0) < 0) {
-                printf("sending failure \n");
+                printf("FAIL \n");
                 continue;
             }
         }
@@ -193,7 +189,7 @@ void send_to_one(char *msg,int curr){
     for(i = 0; i < n; i++) {
         if(clients[i] == curr) {
             if(send(clients[i],msg,strlen(msg),0) < 0) {
-                printf("sending failure \n");
+                printf("FAIL \n");
                 continue;
             }
         }
@@ -206,7 +202,7 @@ void send_to_all(char *msg){
     pthread_mutex_lock(&mutex);
     for(i = 0; i < n; i++) {
       if(send(clients[i],msg,strlen(msg),0) < 0) {
-          printf("sending failure \n");
+                printf("FAIL \n");
           continue;
       }
     }
@@ -230,7 +226,7 @@ void message_LOBBY_INFO(char *buf) {
   }
 };
 
-void  message_GAME_IN_PROGRESS(char *buf) {
+void message_GAME_IN_PROGRESS(char *buf) {
   strcpy(buf, "3");
 };
 
@@ -515,21 +511,21 @@ void handle_JOIN_GAME(char *msg, int sock) {
       message_LOBBY_INFO(resp);
       send_to_all(resp);
 
-      if (game.player_count == 2) {
+      if (game.player_count == MAX_CLIENT_COUNT) {
         game.status = GAME_STATUS_ACTIVE;
         message_GAME_START(resp);
         send_to_all(resp);
 
-        // for (int i = 0; i < MAP_SIZE; i++) {
-        //   char row[MAP_SIZE + 2];
-        //   char buf[MESSAGE_SIZE];
+        for (int i = 0; i < MAP_SIZE; i++) {
+          char row[MAP_SIZE + 2];
+          char buf[MESSAGE_SIZE];
 
-        //   get_map_row(row, i);
-        //   message_MAP_ROW(buf, i, row);
+          get_map_row(row, i);
+          message_MAP_ROW(buf, i, row);
           
-        //   // sleep(1);
-        //   send_to_all(buf);
-        // }
+          // sleep(1);
+          send_to_all(buf);
+        }
       }
     }
   }  
@@ -630,7 +626,7 @@ void handle_MOVE(char *msg, int sock) {
   message_GAME_UPDATE(resp);
   send_to_all(resp);
 
-  if ( (game.scores[other_id] >= 1) || (game.scores[id] >= 1)) {
+  if ( (game.scores[other_id] >= MAX_SCORE) || (game.scores[id] >= MAX_SCORE)) {
     message_GAME_END(resp);
     send_to_all(resp);
   }
@@ -665,9 +661,6 @@ void *recvmg(void *client_sock){
 }
 
 int main(){
-    // new_game();
-    // printf("%d %d \n",find_x_location('C'), find_y_location('C'));
-
     struct sockaddr_in ServerIp;
     pthread_t recvt;
     int sock=0 , Client_sock=0;
@@ -677,26 +670,26 @@ int main(){
     ServerIp.sin_addr.s_addr = inet_addr("127.0.0.1");
     sock = socket( AF_INET , SOCK_STREAM, 0 );
     if( bind( sock, (struct sockaddr *)&ServerIp, sizeof(ServerIp)) == -1 )
-        printf("cannot bind, error!! \n");
+        printf("BINDING ERROR \n");
     else
-        printf("Server Started\n");
+        printf("STARTED\n");
 
     if( listen( sock ,20 ) == -1 )
-        printf("listening failed \n");
+        printf("FAIL \n");
 
 
     new_game();
-    print_map(game);
+    // print_map(game);
 
     while(1){
         if( (Client_sock = accept(sock, (struct sockaddr *)NULL,NULL)) < 0 ) {
-            printf("accept failed  \n");
+            printf("SOCK FAIL \n");
         }
 
         pthread_mutex_lock(&mutex);
         clients[n]= Client_sock;
         n++;
-        // creating a thread for each client 
+
         pthread_create(&recvt,NULL,(void *)recvmg,&Client_sock);
         pthread_mutex_unlock(&mutex);
     }

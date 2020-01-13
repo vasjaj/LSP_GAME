@@ -6,7 +6,7 @@
 #include <pthread.h>
 
 #define MESSAGE_SIZE 1024
-#define PORT 8081
+#define PORT 8080
 
 char msg[MESSAGE_SIZE];
 
