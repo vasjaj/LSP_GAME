@@ -22,7 +22,7 @@ pthread_mutex_t mutex;
 int clients[MAX_CLIENT_COUNT];
 struct Game game;
 int n=0;
-char available_symbols[] = {'A', 'B', 'C', 'D'};
+char available_symbols[] = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'};
 
 struct Game {
   char game_map[MAP_SIZE][MAP_SIZE + 2];
